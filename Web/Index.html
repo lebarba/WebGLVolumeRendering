@@ -1,0 +1,368 @@
+<html lang="en">
+	<head>
+		<title>TuTTorials</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #ffffff;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+
+				background-color: #050505;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+
+			a {
+
+				color: #ffffff;
+			}
+
+			#oldie a { color:#da0 }
+		</style>
+	</head>
+	<body>
+		<div id="container">
+			<div>Transfer function</div>
+			0.0<img id="transferFunctionImg" style="align:right"/>1.0
+		</div>
+		<script src="./js/three.min.js"></script>
+		<script src="./js/Detector.js"></script>
+		<script src="./js/stats.min.js"></script>
+		<script src="./js/OrbitControls.js"></script>
+		<script src="./js/dat.gui.min.js"></script>
+
+		<script id="fragmentShaderFirstPass" type="x-shader/x-fragment">
+			varying vec3 worldSpaceCoords;
+
+			void main( void ) {
+				//The fragment's world space coordinates as fragment output.
+				gl_FragColor = vec4( worldSpaceCoords.x , worldSpaceCoords.y, worldSpaceCoords.z, 1 );
+			}
+		</script>
+		<script id="vertexShaderFirstPass" type="x-shader/x-vertex">
+			varying vec3 worldSpaceCoords;
+			
+			void main()
+			{
+				//Set the world space coordinates of the back faces vertices as output.
+				worldSpaceCoords = position + vec3(0.5, 0.5, 0.5);
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+			}
+		</script>
+		<script id="fragmentShaderSecondPass" type="x-shader/x-fragment">
+			varying vec3 worldSpaceCoords;
+			varying vec4 ProjectedCoords;
+			uniform sampler2D tex, cubeTex, transferTex;
+			uniform float steps;
+			uniform float alphaCorrection;
+			const int MAX_STEPS = 512;
+			
+			vec4 sampleAs3DTexture( vec3 texCoord )
+			{
+				vec4 color;
+				//The z coordinate determines which Z slice we have to look for.
+				//Z slice number goes from 0 to 255.
+				float zSliceNumber = floor(texCoord.z  * 255.0);
+				
+				//Adjust the coordinates so it goes from [0, 1).
+				texCoord.xy -= 1.0 / (256.0*2.0);
+				
+				//The Z slices are stored in a matrix of 16x16 of Z slices.
+				//The original UV coordinates have to be rescaled by the tile numbers in each row and column.
+				texCoord.xy /= 16.0;
+
+				//Add an offset to the original UV coordinates depending on the row and column number.
+				texCoord.x += (mod(zSliceNumber, 16.0 ) / 16.0);
+				texCoord.y += floor((255.0 - zSliceNumber) / 16.0) / 16.0;
+					
+				//Get the opacity value from the 2D texture.
+				color.a = texture2D( cubeTex, texCoord.xy ).a;
+				
+				//Based on the opacity obtained earlier, get the RGB color in the Transfer function texture.
+				color.rgb = texture2D( transferTex, vec2( color.w, 1.0) ).rgb;
+				return color;
+			}
+
+		
+			void main( void ) {
+
+				//Unproject the coordinates and make it from [-1;1] to [0;1]
+				vec2 texc = vec2(((ProjectedCoords.x / ProjectedCoords.w) + 1.0 ) / 2.0,
+								((ProjectedCoords.y / ProjectedCoords.w) + 1.0 ) / 2.0 );
+
+				//The front position is the world space position of the second render pass.
+				vec3 frontPos = worldSpaceCoords;
+				
+				//The back position is the world space position stored in the texture.
+				vec3 backPos = texture2D(tex, texc).xyz;
+
+				//The direction from the front position to back position.
+				vec3 dir = backPos - frontPos;
+				
+				float rayLength = length(dir); 
+				
+				//TODO: this doesn't get artifacts.
+				float stepsize = rayLength / steps;
+				float delta = stepsize;
+
+				//The increment in each direction for each step.
+				vec3 deltaDirection = normalize(dir) * delta;
+				float deltaDirectionLength = length(deltaDirection);
+
+				//Start the ray casting from the front position.
+				vec3 currentPosition = frontPos;
+				
+				//The color accumulator.
+				vec4 accumulatedColor = vec4(0.0,0.0,0.0,0.0);
+				
+				float accumulatedAlpha = 0.0;
+				float accumulatedLength = 0.0;
+				vec4 colorSample;
+				float alphaSample;
+
+			
+				for(int i = 0; i < MAX_STEPS; i++)
+				{
+					//Get the voxel intensity value from the 3D texture.	
+					colorSample = sampleAs3DTexture( currentPosition );
+				  
+					//Allow the alpha correction customization
+					alphaSample = colorSample.a / alphaCorrection;
+					
+					//Perform the composition.
+					accumulatedColor += (1.0 - accumulatedAlpha) * colorSample * alphaSample;
+					accumulatedAlpha += alphaSample;
+					currentPosition += deltaDirection;
+					accumulatedLength += deltaDirectionLength;
+							  
+					//If the length traversed is more than the ray length, or if the alpha accumulated then exit .
+					if(accumulatedLength >= rayLength || accumulatedAlpha >= 1.0 )
+						break;
+				}
+
+				gl_FragColor  = accumulatedColor;
+				  
+			}
+		</script>
+		
+		<script id="vertexShaderSecondPass" type="x-shader/x-vertex">
+			varying vec3 worldSpaceCoords;
+			varying vec4 ProjectedCoords;
+			
+			void main()
+			{
+				worldSpaceCoords = (modelMatrix * vec4(position + vec3(0.5, 0.5,0.5), 1.0 )).xyz;
+				gl_Position = projectionMatrix *  modelViewMatrix * vec4( position, 1.0 );
+				ProjectedCoords =  projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+			}
+		</script>
+		
+		
+		
+		<script>
+
+			if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+			var container, stats;
+			var camera, sceneFirstPass, sceneSecondPass, renderer;
+
+			var clock = new THREE.Clock();
+			var rtTexture, cubeTexture, transferTexture;
+			var histogram = [];
+			var guiControls;
+			
+			var materialSecondPass;
+			init();
+			animate();
+
+			function init() {
+
+				//Parameters that can be modified.
+				guiControls = new function() {
+					this.model = [ 'bonsai', 'foot', 'teapot' ];
+					this.steps = 256.0;
+					this.alphaCorrection = 10.0;
+					this.color1 = "#00FA58";
+					this.stepPos1 = 0.1;
+					this.color2 = "#CC6600";
+					this.stepPos2 = 0.7;
+					this.color3 = "#F2F200";
+					this.stepPos3 = 1.0;
+				};
+				
+				container = document.getElementById( 'container' );
+
+
+				camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 0.1, 3000.0 );
+				camera.position.z = 2.0;
+
+				controls = new THREE.OrbitControls( camera );
+				controls.center.set( 0.0, 0.0, 0.0 );
+
+				//Load the 2D texture containing the Z slices.
+				//cubeTexture = THREE.ImageUtils.loadTexture('bonsai.raw.png');
+				//cubeTexture = THREE.ImageUtils.loadTexture('teapot.raw.png');
+				//cubeTexture = THREE.ImageUtils.loadTexture('skull.raw.png');
+				cubeTexture = THREE.ImageUtils.loadTexture('foot.raw.png');
+				cubeTexture.wrapS = cubeTexture.wrapT =  THREE.ClampToEdgeWrapping;
+
+				var transferTexture = updateTransferFunction();
+			  
+
+				
+				var screenSize = new THREE.Vector2( window.innerWidth, window.innerHeight );
+				rtTexture = new THREE.WebGLRenderTarget( screenSize.x, screenSize.y, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat } );
+
+				rtTexture.wrapS = rtTexture.wrapT = THREE.ClampToEdgeWrapping;
+				
+				var materialFirstPass = new THREE.ShaderMaterial( {
+					vertexShader: document.getElementById( 'vertexShaderFirstPass' ).textContent,
+					fragmentShader: document.getElementById( 'fragmentShaderFirstPass' ).textContent,
+					side: THREE.BackSide
+				} );
+				
+				materialSecondPass = new THREE.ShaderMaterial( {
+					vertexShader: document.getElementById( 'vertexShaderSecondPass' ).textContent,
+					fragmentShader: document.getElementById( 'fragmentShaderSecondPass' ).textContent,
+					side: THREE.FrontSide,
+					uniforms: {	tex:  { type: "t", value: rtTexture }, 
+								cubeTex:  { type: "t", value: cubeTexture }, 
+								transferTex:  { type: "t", value: transferTexture },
+								steps : {type: "1f" , value: guiControls.steps },
+								alphaCorrection : {type: "1f" , value: guiControls.alphaCorrection }}		
+				 });
+
+				sceneFirstPass = new THREE.Scene();
+				sceneSecondPass = new THREE.Scene();
+
+				var boxGeometry = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+				boxGeometry.doubleSided = true;
+				
+				var meshFirstPass = new THREE.Mesh( boxGeometry, materialFirstPass );
+				var meshSecondPass = new THREE.Mesh( boxGeometry, materialSecondPass );
+		
+				
+				sceneFirstPass.add( meshFirstPass );
+				sceneSecondPass.add( meshSecondPass );
+
+				
+				
+				renderer = new THREE.WebGLRenderer();
+				container.appendChild( renderer.domElement );
+
+				stats = new Stats();
+				stats.domElement.style.position = 'absolute';
+				stats.domElement.style.top = '0px';
+				container.appendChild( stats.domElement );
+
+				
+				var gui = new dat.GUI();
+				gui.add(guiControls, 'model', [ 'bonsai', 'foot', 'teapot' ] );
+				gui.add(guiControls, 'steps', 0.0, 512.0);
+				gui.add(guiControls, 'alphaCorrection', 0.0, 16.0);
+				
+				
+				var step1Folder = gui.addFolder('Step 1');
+				var controllerColor1 = step1Folder.addColor(guiControls, 'color1');
+				var controllerStepPos1 = step1Folder.add(guiControls, 'stepPos1', 0.0, 1.0);
+				controllerColor1.onChange(function(value) { materialSecondPass.uniforms.transferTex.value = updateTransferFunction(); } );
+				controllerStepPos1.onChange(function(value) { materialSecondPass.uniforms.transferTex.value = updateTransferFunction(); } );
+				
+				var step2Folder = gui.addFolder('Step 2');
+				var controllerColor2 = step2Folder.addColor(guiControls, 'color2');
+				var controllerStepPos2 = step2Folder.add(guiControls, 'stepPos2', 0.0, 1.0);
+				controllerColor2.onChange(function(value) { materialSecondPass.uniforms.transferTex.value = updateTransferFunction(); } );
+				controllerStepPos2.onChange(function(value) { materialSecondPass.uniforms.transferTex.value = updateTransferFunction(); } );
+				
+				
+				var step3Folder = gui.addFolder('Step 3');
+				var controllerColor3 = step3Folder.addColor(guiControls, 'color3');
+				var controllerStepPos3 = step3Folder.add(guiControls, 'stepPos3', 0.0, 1.0);
+				controllerColor3.onChange(function(value) { materialSecondPass.uniforms.transferTex.value = updateTransferFunction(); } );
+				controllerStepPos3.onChange(function(value) { materialSecondPass.uniforms.transferTex.value = updateTransferFunction(); } );
+						
+				
+				step1Folder.open();
+				step2Folder.open();
+				step3Folder.open();
+
+  
+				onWindowResize();
+
+				window.addEventListener( 'resize', onWindowResize, false );
+			
+			}
+			
+			function updateTransferFunction()
+			{
+				var canvas = document.createElement('canvas');
+				canvas.height = 20;
+				canvas.width = 256;
+
+				var ctx = canvas.getContext('2d');
+			
+				var grd = ctx.createLinearGradient(0, 0, canvas.width -1 , canvas.height - 1);
+				grd.addColorStop(guiControls.stepPos1, guiControls.color1);   
+				grd.addColorStop(guiControls.stepPos2, guiControls.color2);  
+				grd.addColorStop(guiControls.stepPos3, guiControls.color3);  
+				
+				ctx.fillStyle = grd;
+				ctx.fillRect(0,0,canvas.width -1 ,canvas.height -1 );
+				
+				var img = document.getElementById("transferFunctionImg");
+				img.src = canvas.toDataURL();
+				img.style.width = "256 px";
+				img.style.height = "128 px";
+				
+				transferTexture =  new THREE.Texture(canvas);
+				transferTexture.wrapS = transferTexture.wrapT =  THREE.ClampToEdgeWrapping;
+				transferTexture.needsUpdate = true;
+
+				return transferTexture;
+			}
+			
+			function onWindowResize( event ) {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+				stats.update();
+			}
+
+			function render() {
+
+				var delta = clock.getDelta();
+				
+				//Render first pass and store the world space coords of the back face fragments into the texture.
+				renderer.render( sceneFirstPass, camera, rtTexture, true );
+				
+				//Render the second pass and perform the volume rendering.
+				renderer.render( sceneSecondPass, camera );
+				
+				materialSecondPass.uniforms.steps.value = guiControls.steps;
+				materialSecondPass.uniforms.alphaCorrection.value = guiControls.alphaCorrection;
+			}
+
+		</script>
+
+	</body>
+</html>
