@@ -55,7 +55,7 @@
 			void main()
 			{
 				//Set the world space coordinates of the back faces vertices as output.
-				worldSpaceCoords = position + vec3(0.5, 0.5, 0.5);
+				worldSpaceCoords = position + vec3(0.5, 0.5, 0.5); //move it from [-0.5;0.5] to [0,1]
 				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
 			}
 		</script>
@@ -90,13 +90,17 @@
 				
 				//Based on the opacity obtained earlier, get the RGB color in the Transfer function texture.
 				color.rgb = texture2D( transferTex, vec2( color.w, 1.0) ).rgb;
+				
+				
+				
+				//TODO: add trilinear interpolation
 				return color;
 			}
 
 		
 			void main( void ) {
 
-				//Unproject the coordinates and make it from [-1;1] to [0;1]
+				//Transform the coordinates it from [-1;1] to [0;1]
 				vec2 texc = vec2(((ProjectedCoords.x / ProjectedCoords.w) + 1.0 ) / 2.0,
 								((ProjectedCoords.y / ProjectedCoords.w) + 1.0 ) / 2.0 );
 
@@ -177,7 +181,8 @@
 			var camera, sceneFirstPass, sceneSecondPass, renderer;
 
 			var clock = new THREE.Clock();
-			var rtTexture, cubeTexture, transferTexture;
+			var rtTexture, transferTexture;
+			var cubeTextures = ['bonsai', 'foot', 'teapot'];
 			var histogram = [];
 			var guiControls;
 			
@@ -189,7 +194,7 @@
 
 				//Parameters that can be modified.
 				guiControls = new function() {
-					this.model = [ 'bonsai', 'foot', 'teapot' ];
+					this.model = 'bonsai';
 					this.steps = 256.0;
 					this.alphaCorrection = 10.0;
 					this.color1 = "#00FA58";
@@ -203,25 +208,23 @@
 				container = document.getElementById( 'container' );
 
 
-				camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 0.1, 3000.0 );
+				camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 0.01, 3000.0 );
 				camera.position.z = 2.0;
 
-				controls = new THREE.OrbitControls( camera );
+				controls = new THREE.OrbitControls( camera, container );
 				controls.center.set( 0.0, 0.0, 0.0 );
 
 				//Load the 2D texture containing the Z slices.
-				//cubeTexture = THREE.ImageUtils.loadTexture('bonsai.raw.png');
-				//cubeTexture = THREE.ImageUtils.loadTexture('teapot.raw.png');
-				//cubeTexture = THREE.ImageUtils.loadTexture('skull.raw.png');
-				cubeTexture = THREE.ImageUtils.loadTexture('foot.raw.png');
-				cubeTexture.wrapS = cubeTexture.wrapT =  THREE.ClampToEdgeWrapping;
+				cubeTextures['bonsai'] = THREE.ImageUtils.loadTexture('bonsai.raw.png');
+				cubeTextures['teapot'] = THREE.ImageUtils.loadTexture('teapot.raw.png');
+				cubeTextures['foot'] = THREE.ImageUtils.loadTexture('foot.raw.png');
 
 				var transferTexture = updateTransferFunction();
 			  
 
 				
 				var screenSize = new THREE.Vector2( window.innerWidth, window.innerHeight );
-				rtTexture = new THREE.WebGLRenderTarget( screenSize.x, screenSize.y, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat } );
+				rtTexture = new THREE.WebGLRenderTarget( screenSize.x, screenSize.y, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, type: THREE.FloatType } );
 
 				rtTexture.wrapS = rtTexture.wrapT = THREE.ClampToEdgeWrapping;
 				
@@ -236,7 +239,7 @@
 					fragmentShader: document.getElementById( 'fragmentShaderSecondPass' ).textContent,
 					side: THREE.FrontSide,
 					uniforms: {	tex:  { type: "t", value: rtTexture }, 
-								cubeTex:  { type: "t", value: cubeTexture }, 
+								cubeTex:  { type: "t", value: cubeTextures['bonsai'] }, 
 								transferTex:  { type: "t", value: transferTexture },
 								steps : {type: "1f" , value: guiControls.steps },
 								alphaCorrection : {type: "1f" , value: guiControls.alphaCorrection }}		
@@ -267,10 +270,11 @@
 
 				
 				var gui = new dat.GUI();
-				gui.add(guiControls, 'model', [ 'bonsai', 'foot', 'teapot' ] );
+				var modelSelected = gui.add(guiControls, 'model', [ 'bonsai', 'foot', 'teapot' ] );
 				gui.add(guiControls, 'steps', 0.0, 512.0);
-				gui.add(guiControls, 'alphaCorrection', 0.0, 16.0);
-				
+				gui.add(guiControls, 'alphaCorrection', 0.0, 32.0);
+								
+				modelSelected.onChange(function(value) { materialSecondPass.uniforms.cubeTex.value =  cubeTextures[value]; } );
 				
 				var step1Folder = gui.addFolder('Step 1');
 				var controllerColor1 = step1Folder.addColor(guiControls, 'color1');
