@@ -1,9 +1,7 @@
 WebGLVolumeRendering
 ====================
+A very simple step by step introduction to pixel shader volume rendering using WebGL and ThreeJS.
 
-
-
-# WebGL Volume Rendering demo 
 Go to  http://lebarba.com/blog/ for the step by step tutorial
 
 
