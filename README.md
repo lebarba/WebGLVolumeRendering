@@ -2,9 +2,9 @@ WebGL Volume Rendering Made Easy
 ====================
 A very simple step by step introduction to pixel shader volume rendering using WebGL and ThreeJS.
 
-Go to  http://lebarba.com/blog/ (issues with hosting, will be fixed soon, use this one: http://lebarba.byethost13.com/ ) for the step by step tutorial
+Go to  http://lebarba.com/blog/ for the step by step tutorial
 
-Demo online in GitHub https://cdn.rawgit.com/lebarba/WebGLVolumeRendering/master/Web/Index.html
+Demo online in GitHub http://www.lebarba.com/WebGL/Index.html
 
 
 ![Screenshot1](https://raw.githubusercontent.com/lebarba/WebGLVolumeRendering/master/Web/img/Bonsai.jpg)    
