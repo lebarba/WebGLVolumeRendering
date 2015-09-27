@@ -23,7 +23,6 @@
 			}
 
 			a {
-
 				color: #ffffff;
 			}
 
@@ -73,7 +72,7 @@
 			{
 				vec4 colorSlice1, colorSlice2;
 				vec2 texCoordSlice1, texCoordSlice2;
-				
+
 				//The z coordinate determines which Z slice we have to look for.
 				//Z slice number goes from 0 to 255.
 				float zSliceNumber1 = floor(texCoord.z  * 255.0);
@@ -230,17 +229,39 @@
 				controls = new THREE.OrbitControls( camera, container );
 				controls.center.set( 0.0, 0.0, 0.0 );
 
+									   
 				//Load the 2D texture containing the Z slices.
-				cubeTextures['bonsai'] = THREE.ImageUtils.loadTexture('bonsai.raw.png');
+				cubeTextures['bonsai'] = THREE.ImageUtils.loadTexture('bonsai.raw.png' );
 				cubeTextures['teapot'] = THREE.ImageUtils.loadTexture('teapot.raw.png');
 				cubeTextures['foot'] = THREE.ImageUtils.loadTexture('foot.raw.png');
 
+
+				//Don't let it generate mipmaps to save memory and apply linear filtering to prevent use of LOD.
+				cubeTextures['bonsai'].generateMipmaps = false;
+				cubeTextures['bonsai'].minFilter = THREE.LinearFilter;
+				cubeTextures['bonsai'].magFilter = THREE.LinearFilter;
+									
+				cubeTextures['teapot'].generateMipmaps = false;
+				cubeTextures['teapot'].minFilter = THREE.LinearFilter;
+				cubeTextures['teapot'].magFilter = THREE.LinearFilter;
+
+				cubeTextures['foot'].generateMipmaps = false;
+				cubeTextures['foot'].minFilter = THREE.LinearFilter;
+				cubeTextures['foot'].magFilter = THREE.LinearFilter;
+
+				
 				var transferTexture = updateTransferFunction();
 			
 				var screenSize = new THREE.Vector2( window.innerWidth, window.innerHeight );
-				rtTexture = new THREE.WebGLRenderTarget( screenSize.x, screenSize.y, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, type: THREE.FloatType } );
+				rtTexture = new THREE.WebGLRenderTarget( screenSize.x, screenSize.y,
+														{ 	minFilter: THREE.LinearFilter,
+															magFilter: THREE.LinearFilter,
+															wrapS:  THREE.ClampToEdgeWrapping,
+															wrapT:  THREE.ClampToEdgeWrapping,
+															format: THREE.RGBFormat, 
+															type: THREE.FloatType, 
+															generateMipmaps: false} );
 
-				rtTexture.wrapS = rtTexture.wrapT = THREE.ClampToEdgeWrapping;
 				
 				var materialFirstPass = new THREE.ShaderMaterial( {
 					vertexShader: document.getElementById( 'vertexShaderFirstPass' ).textContent,
@@ -380,7 +401,7 @@
 				materialSecondPass.uniforms.alphaCorrection.value = guiControls.alphaCorrection;
 			}
 
-			//Leandro Barbagallo - lebarba at gmail.com
+			//Leandro R Barbagallo - 2015 - lebarba at gmail.com
 		</script>
 
 	</body>
