@@ -126,6 +126,14 @@
 				//The front position is the world space position of the second render pass.
 				vec3 frontPos = worldSpaceCoords;
 
+				//Using NearestFilter for rtTexture mostly eliminates bad backPos values at the edges
+				//of the cube, but there may still be no valid backPos value for the current fragment.
+				if ((backPos.x == 0.0) && (backPos.y == 0.0))
+				{
+					gl_FragColor = vec4(0.0);
+					return;
+				}
+
 				//The direction from the front position to back position.
 				vec3 dir = backPos - frontPos;
 
@@ -267,9 +275,11 @@
 				var transferTexture = updateTransferFunction();
 
 				var screenSize = new THREE.Vector2( window.innerWidth, window.innerHeight );
+				//Use NearestFilter to eliminate interpolation.  At the cube edges, interpolated world coordinates
+				//will produce bogus ray directions in the fragment shader, and thus extraneous colors.
 				rtTexture = new THREE.WebGLRenderTarget( screenSize.x, screenSize.y,
-														{ 	minFilter: THREE.LinearFilter,
-															magFilter: THREE.LinearFilter,
+														{ 	minFilter: THREE.NearestFilter,
+															magFilter: THREE.NearestFilter,
 															wrapS:  THREE.ClampToEdgeWrapping,
 															wrapT:  THREE.ClampToEdgeWrapping,
 															format: THREE.RGBFormat,
