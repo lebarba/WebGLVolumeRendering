@@ -249,14 +249,13 @@
 				camera.position.z = 2.0;
 
 				controls = new THREE.OrbitControls( camera, container );
-				controls.center.set( 0.0, 0.0, 0.0 );
+				controls.target.set( 0.0, 0.0, 0.0 );
 
 
 				//Load the 2D texture containing the Z slices.
-				cubeTextures['bonsai'] = THREE.ImageUtils.loadTexture('bonsai.raw.png' );
-				cubeTextures['teapot'] = THREE.ImageUtils.loadTexture('teapot.raw.png');
-				cubeTextures['foot'] = THREE.ImageUtils.loadTexture('foot.raw.png');
-
+				cubeTextures["bonsai"] = new THREE.TextureLoader().load("bonsai.raw.png");
+				cubeTextures["teapot"] = new THREE.TextureLoader().load("teapot.raw.png");
+				cubeTextures["foot"] = new THREE.TextureLoader().load("foot.raw.png");
 
 				//Don't let it generate mipmaps to save memory and apply linear filtering to prevent use of LOD.
 				cubeTextures['bonsai'].generateMipmaps = false;
@@ -277,14 +276,16 @@
 				var screenSize = new THREE.Vector2( window.innerWidth, window.innerHeight );
 				//Use NearestFilter to eliminate interpolation.  At the cube edges, interpolated world coordinates
 				//will produce bogus ray directions in the fragment shader, and thus extraneous colors.
-				rtTexture = new THREE.WebGLRenderTarget( screenSize.x, screenSize.y,
-														{ 	minFilter: THREE.NearestFilter,
-															magFilter: THREE.NearestFilter,
-															wrapS:  THREE.ClampToEdgeWrapping,
-															wrapT:  THREE.ClampToEdgeWrapping,
-															format: THREE.RGBFormat,
-															type: THREE.FloatType,
-															generateMipmaps: false} );
+				rtTexture = new THREE.WebGLRenderTarget(screenSize.x, screenSize.y, {
+					minFilter: THREE.NearestFilter,
+					magFilter: THREE.NearestFilter,
+					wrapS: THREE.ClampToEdgeWrapping,
+					wrapT: THREE.ClampToEdgeWrapping,
+					format: THREE.RGBAFormat,
+					type: THREE.FloatType,
+					generateMipmaps: false,
+					stencilBuffer: true,
+				});
 
 
 				var materialFirstPass = new THREE.ShaderMaterial( {
@@ -297,12 +298,13 @@
 					vertexShader: document.getElementById( 'vertexShaderSecondPass' ).textContent,
 					fragmentShader: document.getElementById( 'fragmentShaderSecondPass' ).textContent,
 					side: THREE.FrontSide,
-					uniforms: {	tex:  { type: "t", value: rtTexture },
+					uniforms: {	tex:  { type: "t", value: rtTexture.texture },
 								cubeTex:  { type: "t", value: cubeTextures['bonsai'] },
 								transferTex:  { type: "t", value: transferTexture },
 								steps : {type: "1f" , value: guiControls.steps },
 								alphaCorrection : {type: "1f" , value: guiControls.alphaCorrection }}
-				 });
+				} );
+				materialSecondPass.needsUpdate = true;
 
 				sceneFirstPass = new THREE.Scene();
 				sceneSecondPass = new THREE.Scene();
@@ -416,10 +418,12 @@
 				var delta = clock.getDelta();
 
 				//Render first pass and store the world space coords of the back face fragments into the texture.
-				renderer.render( sceneFirstPass, camera, rtTexture, true );
+				renderer.setRenderTarget(rtTexture);
+				renderer.render(sceneFirstPass, camera);
+				renderer.setRenderTarget(null);
 
 				//Render the second pass and perform the volume rendering.
-				renderer.render( sceneSecondPass, camera );
+				renderer.render(sceneSecondPass, camera);
 
 				materialSecondPass.uniforms.steps.value = guiControls.steps;
 				materialSecondPass.uniforms.alphaCorrection.value = guiControls.alphaCorrection;
